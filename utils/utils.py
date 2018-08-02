@@ -25,6 +25,8 @@ def parse_args(session):
     if session == "train":
         parser.add_argument('--datadir', required=True, action='store', dest='TRAIN_DIR',
                             help='Where the initial unprocessed data is')
+        parser.add_argument('--valdir', required=True, action='store', dest='VAL_DIR',
+                            help='Where the validation data is')
         parser.add_argument('--weightdir', required=True, action='store', dest='OUT_DIR',
                             help='Output directory where the trained models are written')
         parser.add_argument('--numcores', required=True, action='store', dest='numcores',
