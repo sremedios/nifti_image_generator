@@ -61,7 +61,7 @@ if __name__ == '__main__':
     ############### DATA IMPORT ###############
 
     params = {'target_size': (256, 256, 160),
-              'batch_size': 8,
+              'batch_size': 4,
               'class_mode': 'categorical', }
 
     train_datagen = NIfTIImageDataGenerator()
@@ -93,9 +93,9 @@ if __name__ == '__main__':
     ############### TRAINING ###############
     model.fit_generator(train_generator,
                         validation_data=validation_generator,
-                        steps_per_epoch=100,
+                        steps_per_epoch=50,
                         epochs=100000,
-                        validation_steps=20,
+                        validation_steps=50,
                         callbacks=callbacks_list)
 
     # TODO: ensure that the classes learned can be predicted upon

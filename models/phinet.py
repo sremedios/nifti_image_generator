@@ -69,7 +69,7 @@ def phinet_2D(n_classes, model_path, num_channels=1, learning_rate=1e-3, num_gpu
         
     return model
 
-def phinet(n_classes, model_path, num_channels=1, learning_rate=1e-3, num_gpus=1):
+def phinet(n_classes, model_path, num_channels=1, learning_rate=1e-3, num_gpus=1, verbose=1,):
     inputs = Input(shape=(None,None,None,num_channels))
 
     x = Conv3D(8, (3,3,3), strides=(2,2,2), padding='same')(inputs)
@@ -107,14 +107,14 @@ def phinet(n_classes, model_path, num_channels=1, learning_rate=1e-3, num_gpus=1
                   loss='categorical_crossentropy',
                   metrics=['accuracy'])
 
-    print(model.summary())
 
     # save json before checking if multi-gpu
     json_string = model.to_json()
     with open(model_path, 'w') as f:
         json.dump(json_string, f)
 
-    print(model.summary())
+    if verbose:
+        print(model.summary())
 
     # recompile if multi-gpu model
     if num_gpus > 1:
