@@ -1,4 +1,6 @@
 data/*
+**/*.nii.gz
+**/*.nii
 **/weights/*
 *.swp
 **/__pycache__/*
