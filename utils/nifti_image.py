@@ -18,23 +18,7 @@ import warnings
 import multiprocessing.pool
 from functools import partial
 
-
 backend = K
-
-
-def _count_valid_files_in_directory(directory,
-                                    white_list_formats,
-                                    split,
-                                    follow_links):
-    ''' has to be implemented again just because of how partial works'''
-    num_files = len(list(
-        _iter_valid_files(directory, white_list_formats, follow_links)))
-    if split:
-        start, stop = int(split[0] * num_files), int(split[1] * num_files)
-    else:
-        start, stop = 0, num_files
-    return stop - start
-
 
 class NIfTIDirectoryIterator(Iterator):
     def __init__(self, directory, image_data_generator,
@@ -117,6 +101,12 @@ class NIfTIDirectoryIterator(Iterator):
             x = img.get_data()
             x = np.reshape(x, x.shape + (self.num_channels,))
             # TODO: extensible image augmentation applied here
+            '''
+            params = self.image_data_generator.get_random_transform(x.shape)
+            x = self.image_data_generator.apply_transform(
+                x.astype(backend.floatx()), params)
+            x = self.image_data_generator.standardize(x)
+            '''
             batch_x[i] = x
 
         # build batch of labels
@@ -154,6 +144,16 @@ class NIfTIImageDataGenerator(ImageDataGenerator):
                                       batch_size=batch_size, shuffle=shuffle, seed=seed,
                                       follow_links=follow_links)
 
+    def apply_transform(self, x, transform_parameters):
+        pass
+
+    def get_random_transform(self, img_shape, seed=None):
+        pass
+
+    def standardize(self, x):
+        pass
+
+
 
 class NIfTINumpyArrayIterator(NumpyArrayIterator):
     # TODO: change some stuff to work with nibabel
@@ -187,6 +187,19 @@ def _iter_valid_files(directory, white_list_formats, follow_links):
                                   'Please verify your output.')
                 if fname.lower().endswith('.' + extension):
                     yield root, fname
+
+def _count_valid_files_in_directory(directory,
+                                    white_list_formats,
+                                    split,
+                                    follow_links):
+    ''' has to be implemented again just because of how partial works'''
+    num_files = len(list(
+        _iter_valid_files(directory, white_list_formats, follow_links)))
+    if split:
+        start, stop = int(split[0] * num_files), int(split[1] * num_files)
+    else:
+        start, stop = 0, num_files
+    return stop - start
 
 
 def _list_valid_filenames_in_directory(directory, white_list_formats, split,
