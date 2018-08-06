@@ -13,6 +13,7 @@ from models.phinet import phinet
 from models.multi_gpu import ModelMGPU
 
 from utils.nifti_image import NIfTIImageDataGenerator
+from utils.augmentations import *
 from utils.utils import parse_args, now
 
 os.environ['FSLOUTPUTTYPE'] = 'NIFTI_GZ'
@@ -60,9 +61,15 @@ if __name__ == '__main__':
 
     ############### DATA IMPORT ###############
 
-    params = {'target_size': (256, 256, 160),
+    # randomly rotate along any axis by 5 degrees
+    augmentations = {rotate: {"angle": 5,
+                              "direction": np.random.random(3) - 0.5}}
+
+
+    params = {'target_size': (256, 256, 256),
               'batch_size': 4,
-              'class_mode': 'categorical', }
+              'class_mode': 'categorical',
+              'augmentations': augmentations}
 
     train_datagen = NIfTIImageDataGenerator()
     test_datagen = NIfTIImageDataGenerator()

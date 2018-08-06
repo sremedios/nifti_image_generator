@@ -18,16 +18,20 @@ import warnings
 import multiprocessing.pool
 from functools import partial
 
+from .pad import pad_image
+
 backend = K
 
 class NIfTIDirectoryIterator(Iterator):
     def __init__(self, directory, image_data_generator,
+                 augmentations=None,
                  target_size=(256, 256, 256), num_channels=1,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
                  follow_links=False, split=None):
         self.directory = directory
         self.image_data_generator = image_data_generator
+        self.augmentations = augmentations
         self.target_size = tuple(target_size)
         self.num_channels = num_channels
         self.image_shape = self.target_size + (num_channels,)
@@ -99,8 +103,14 @@ class NIfTIDirectoryIterator(Iterator):
             img = nib.load(os.path.join(self.directory, fname))
             # TODO: pad/crop image to target_size here
             x = img.get_data()
-            x = np.reshape(x, x.shape + (self.num_channels,))
+            x = pad_image(x, self.target_size)
             # TODO: extensible image augmentation applied here
+            if self.augmentations:
+                for aug, params in self.augmentations.items():
+                    x = aug(x, **params)
+
+            # TODO: figure out how to handle multi-chan data; for now 3D volumes with 1 chan
+            x = np.reshape(x, x.shape + (self.num_channels,))
             '''
             params = self.image_data_generator.get_random_transform(x.shape)
             x = self.image_data_generator.apply_transform(
@@ -134,11 +144,13 @@ class NIfTIDirectoryIterator(Iterator):
 
 class NIfTIImageDataGenerator(ImageDataGenerator):
     def flow_from_directory(self, directory,
+                            augmentations=None,
                             target_size=(256, 256, 256), num_channels=1,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
                             follow_links=False):
         return NIfTIDirectoryIterator(directory, self,
+                                      augmentations=augmentations,
                                       target_size=target_size, num_channels=num_channels,
                                       classes=classes, class_mode=class_mode,
                                       batch_size=batch_size, shuffle=shuffle, seed=seed,
