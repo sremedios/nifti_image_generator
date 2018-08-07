@@ -1,1 +1,1 @@
---datadir data/train --valdir data/validation --weightdir models/weights --numcores 1 --classes FL,PD,T1,T2
+--datadir data/train --valdir data/validation --weightdir models/weights --numcores 1 --classes FL,FLC,PD,T1,T1C,T2

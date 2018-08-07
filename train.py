@@ -9,7 +9,7 @@ from keras.callbacks import ModelCheckpoint, TensorBoard, ReduceLROnPlateau, Ear
 from keras import backend as K
 from keras.models import model_from_json
 
-from models.phinet import phinet
+from models.phinet import phinet, phinet_2D
 from models.multi_gpu import ModelMGPU
 
 from utils.nifti_image import NIfTIImageDataGenerator
@@ -42,16 +42,31 @@ if __name__ == '__main__':
     MODEL_NAME = "phinet_model_" + "-".join(classes)
     MODEL_PATH = os.path.join(WEIGHT_DIR, MODEL_NAME+".json")
 
-    for d in [WEIGHT_DIR, ]:
+    SAMPLE_AUG_PATH = os.path.join("data", "augmented_slices")
+    AUG_FILE_PREFIX = "augmented_file"
+
+    for d in [WEIGHT_DIR, SAMPLE_AUG_PATH]:
         if not os.path.exists(d):
             os.makedirs(d)
 
+    patch_size = (175, 175)
+
     ############### MODEL SELECTION ###############
 
+    '''
     if results.model:
-        model = load_model(results.model)
+        with open(results.model) as json_data:
+            model = model_from_json(json.load(json_data))
         model.load_weights(results.weights)
-    else:
+    '''
+    if len(patch_size) == 2:
+        model = phinet_2D(model_path=MODEL_PATH,
+                          n_classes=len(classes),
+                          learning_rate=1e-4,
+                          num_channels=1,
+                          num_gpus=NUM_GPUS,
+                          verbose=0,)
+    elif len(patch_size) == 3:
         model = phinet(model_path=MODEL_PATH,
                        n_classes=len(classes),
                        learning_rate=1e-4,
@@ -59,23 +74,49 @@ if __name__ == '__main__':
                        num_gpus=NUM_GPUS,
                        verbose=0,)
 
+    if results.weights:
+        model.load_weights(results.weights)
+
     ############### DATA IMPORT ###############
 
+    '''
     # randomly rotate along any axis by 5 degrees
-    augmentations = {rotate: {"angle": 5,
-                              "direction": np.random.random(3) - 0.5}}
+    augmentations = {rotate_3D: {"angle": 5,
+                                 "direction": np.random.random(3) - 0.5}}
+    '''
+    # augmentations occur in the order they appear
+    train_augmentations = {
+        get_patch_2D: {"patch_size": patch_size},
+        rotate_2D: {"max_angle": 15}
+    }
+    val_augmentations = {
+        get_patch_2D: {"patch_size": patch_size},
+    }
 
+    num_files = 2087
+    num_val_files = 600
+    batch_size = 32
 
-    params = {'target_size': (256, 256, 256),
-              'batch_size': 4,
-              'class_mode': 'categorical',
-              'augmentations': augmentations}
+    params = {
+        # 'target_size': (256, 256, 256),
+        'target_size': patch_size,
+        'batch_size': batch_size,
+        'class_mode': 'categorical',
+        # 'axial_slice': 2,
+        # 'save_to_dir': SAMPLE_AUG_PATH,
+        # 'save_prefix': AUG_FILE_PREFIX,
+    }
+
+    train_params = {'augmentations': train_augmentations}
+    val_params = {'augmentations': val_augmentations}
 
     train_datagen = NIfTIImageDataGenerator()
     test_datagen = NIfTIImageDataGenerator()
 
-    train_generator = train_datagen.flow_from_directory(TRAIN_DIR, **params)
-    validation_generator = test_datagen.flow_from_directory(VAL_DIR, **params)
+    train_generator = train_datagen.flow_from_directory(
+        TRAIN_DIR, **params, **train_params)
+    validation_generator = test_datagen.flow_from_directory(
+        VAL_DIR, **params, **val_params)
 
     ############### CALLBACKS ###############
 
@@ -94,15 +135,15 @@ if __name__ == '__main__':
     callbacks_list.append(checkpoint)
 
     # Early Stopping, used to quantify convergence
-    es = EarlyStopping(monitor='val_acc', min_delta=1e-8, patience=20)
+    es = EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=50)
     callbacks_list.append(es)
 
     ############### TRAINING ###############
     model.fit_generator(train_generator,
                         validation_data=validation_generator,
-                        steps_per_epoch=50,
+                        steps_per_epoch=num_files//batch_size,  # total number of images
                         epochs=100000,
-                        validation_steps=50,
+                        validation_steps=num_val_files//batch_size,  # total number val images
                         callbacks=callbacks_list)
 
     # TODO: ensure that the classes learned can be predicted upon

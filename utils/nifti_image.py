@@ -18,6 +18,10 @@ import warnings
 import multiprocessing.pool
 from functools import partial
 
+from PIL import Image as pil_image 
+from scipy.misc import imsave
+
+from .display import show_image
 from .pad import pad_image
 
 backend = K
@@ -28,6 +32,8 @@ class NIfTIDirectoryIterator(Iterator):
                  target_size=(256, 256, 256), num_channels=1,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
+                 save_to_dir=None, save_prefix='', save_format='png',
+                 axial_slice=None,
                  follow_links=False, split=None):
         self.directory = directory
         self.image_data_generator = image_data_generator
@@ -43,6 +49,11 @@ class NIfTIDirectoryIterator(Iterator):
                              '"binary", "sparse", "input"'
                              ' or None.')
         self.class_mode = class_mode
+
+        self.save_to_dir = save_to_dir
+        self.save_prefix = save_prefix
+        self.save_format = save_format
+        self.axial_slice = axial_slice
 
         white_list_formats = {'nii', 'nii.gz'}
 
@@ -103,7 +114,8 @@ class NIfTIDirectoryIterator(Iterator):
             img = nib.load(os.path.join(self.directory, fname))
             # TODO: pad/crop image to target_size here
             x = img.get_data()
-            x = pad_image(x, self.target_size)
+            #x = pad_image(x, self.target_size)
+            x = pad_image(x, (256,256,256))
             # TODO: extensible image augmentation applied here
             if self.augmentations:
                 for aug, params in self.augmentations.items():
@@ -111,6 +123,8 @@ class NIfTIDirectoryIterator(Iterator):
 
             # TODO: figure out how to handle multi-chan data; for now 3D volumes with 1 chan
             x = np.reshape(x, x.shape + (self.num_channels,))
+
+
             '''
             params = self.image_data_generator.get_random_transform(x.shape)
             x = self.image_data_generator.apply_transform(
@@ -118,6 +132,34 @@ class NIfTIDirectoryIterator(Iterator):
             x = self.image_data_generator.standardize(x)
             '''
             batch_x[i] = x
+
+        if self.save_to_dir:
+            for i, j in enumerate(index_array):
+
+                # if 3D training images, save a single slice to disk
+                if len(batch_x.shape) == 5:
+                    if self.axial_slice:
+                        img = batch_x[i,:,:,self.axial_slice,0].T
+                    else:
+                        middle_slice = batch_x.shape[3]//2
+                        img = batch_x[i,:,:,middle_slice,0].T
+                    fname = '{prefix}_{index}_{hash}.{format}'.format(
+                            prefix=self.save_prefix,
+                            index=j,
+                            hash=np.random.randint(1e7),
+                            format=self.save_format)
+                    fname = os.path.join(self.save_to_dir, fname)
+                    imsave(fname, img)
+                # if 2D training images, save that 2D image to disk
+                elif len(batch_x.shape) == 4: 
+                    img = batch_x[i,:,:,0].T
+                    fname = '{prefix}_{index}_{hash}.{format}'.format(
+                            prefix=self.save_prefix,
+                            index=j,
+                            hash=np.random.randint(1e7),
+                            format=self.save_format)
+                    fname = os.path.join(self.save_to_dir, fname)
+                    imsave(fname, img)
 
         # build batch of labels
         if self.class_mode == 'input':
@@ -148,12 +190,17 @@ class NIfTIImageDataGenerator(ImageDataGenerator):
                             target_size=(256, 256, 256), num_channels=1,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
+                            save_to_dir=None, save_prefix='', save_format='png',
+                            axial_slice=None,
                             follow_links=False):
         return NIfTIDirectoryIterator(directory, self,
                                       augmentations=augmentations,
                                       target_size=target_size, num_channels=num_channels,
                                       classes=classes, class_mode=class_mode,
                                       batch_size=batch_size, shuffle=shuffle, seed=seed,
+                                      save_to_dir=save_to_dir, save_prefix=save_prefix, 
+                                      save_format=save_format,
+                                      axial_slice=axial_slice,
                                       follow_links=follow_links)
 
     def apply_transform(self, x, transform_parameters):
