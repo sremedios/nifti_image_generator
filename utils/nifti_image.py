@@ -30,6 +30,7 @@ class NIfTIDirectoryIterator(Iterator):
     def __init__(self, directory, image_data_generator,
                  augmentations=None,
                  target_size=(256, 256, 256), num_channels=1,
+                 num_patches=1,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
                  save_to_dir=None, save_prefix='', save_format='png',
@@ -40,6 +41,7 @@ class NIfTIDirectoryIterator(Iterator):
         self.augmentations = augmentations
         self.target_size = tuple(target_size)
         self.num_channels = num_channels
+        self.num_patches = num_patches
         self.image_shape = self.target_size + (num_channels,)
         self.classes = classes
         if class_mode not in {'categorical', 'binary', 'sparse',
@@ -106,10 +108,11 @@ class NIfTIDirectoryIterator(Iterator):
 
     def _get_batches_of_transformed_samples(self, index_array):
         batch_x = np.zeros(
-            (len(index_array),) + self.image_shape,
+            (len(index_array) * self.num_patches,) + self.image_shape,
             dtype=backend.floatx())
         # build batch of image data
-        for i, j in enumerate(index_array):
+        i = 0
+        for j in index_array:
             fname = self.filenames[j]
             img = nib.load(os.path.join(self.directory, fname))
             # TODO: pad/crop image to target_size here
@@ -122,16 +125,15 @@ class NIfTIDirectoryIterator(Iterator):
                     x = aug(x, **params)
 
             # TODO: figure out how to handle multi-chan data; for now 3D volumes with 1 chan
-            x = np.reshape(x, x.shape + (self.num_channels,))
+            if len(batch_x.shape)-1 == len(x.shape):
+                x = np.reshape(x, x.shape + (self.num_channels,))
+                batch_x[i] = x
+                i += 1
+            else: # handle multi patches
+                for transformed_img in x:
+                    batch_x[i] = transformed_img
+                    i += 1
 
-
-            '''
-            params = self.image_data_generator.get_random_transform(x.shape)
-            x = self.image_data_generator.apply_transform(
-                x.astype(backend.floatx()), params)
-            x = self.image_data_generator.standardize(x)
-            '''
-            batch_x[i] = x
 
         if self.save_to_dir:
             for i, j in enumerate(index_array):
@@ -188,6 +190,7 @@ class NIfTIImageDataGenerator(ImageDataGenerator):
     def flow_from_directory(self, directory,
                             augmentations=None,
                             target_size=(256, 256, 256), num_channels=1,
+                            num_patches=1,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
                             save_to_dir=None, save_prefix='', save_format='png',
@@ -196,6 +199,7 @@ class NIfTIImageDataGenerator(ImageDataGenerator):
         return NIfTIDirectoryIterator(directory, self,
                                       augmentations=augmentations,
                                       target_size=target_size, num_channels=num_channels,
+                                      num_patches=num_patches,
                                       classes=classes, class_mode=class_mode,
                                       batch_size=batch_size, shuffle=shuffle, seed=seed,
                                       save_to_dir=save_to_dir, save_prefix=save_prefix, 

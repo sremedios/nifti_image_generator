@@ -21,54 +21,67 @@ import nibabel as nib
 import os
 from .pad import pad_image
 
-def get_patch_2D(img, patch_size):
+
+def get_patch_2D(img, patch_size, num_patches, transpose_chance=0, num_channels=1):
     '''
-    Gets a single 2D patch from a 3D volume
+    Gets num_patches 2D patches from a 3D volume
 
     img is the 3D image tensor
     patch_size is the size of the 2D patch
     '''
     random.seed()
     mu = 0
-    sigma = 40
+    sigma = 10
     center_coords = [x//2 for x in img.shape]
 
-    timeout = 50
+    patches = np.empty((num_patches, *patch_size, num_channels))
 
-    while True:
+    for i in range(num_patches):
 
-        if timeout <= 0:
-            return np.zeros(patch_size)
+        timeout = 50
+        patch = np.zeros(patch_size)
 
-        horizontal_displacement = int(random.gauss(mu, sigma))
-        depth_displacement = int(random.gauss(mu, sigma))
-        vertical_displacement = int(random.gauss(mu, sigma))
+        while timeout > 0 and np.sum(patch) < 5:
 
-        c = [center_coords[0] + horizontal_displacement,
-             center_coords[1] + depth_displacement,
-             center_coords[2] + depth_displacement, ]
+            horizontal_displacement = int(random.gauss(mu, sigma))
+            depth_displacement = int(random.gauss(mu, sigma))
+            vertical_displacement = int(random.gauss(mu, sigma))
 
-        if not (c[0]+patch_size[0]//2 > img.shape[0] or c[0]-patch_size[0]//2 < 0 or
-                c[1]+patch_size[1]//2 > img.shape[1] or c[1]-patch_size[1]//2 < 0 or
-                c[2] > img.shape[2] or c[2] < 0 or
-                img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
-                    c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
-                    c[2]].shape != patch_size or
-                np.sum(img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
-                    c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
-                    c[2]]) < 10):
-            break 
+            c = [center_coords[0] + horizontal_displacement,
+                 center_coords[1] + depth_displacement,
+                 center_coords[2] + depth_displacement, ]
 
-        timeout -=1 
+            if c[0]+patch_size[0]//2 > img.shape[0] or c[0]-patch_size[0]//2 < 0 or\
+               c[1]+patch_size[1]//2 > img.shape[1] or c[1]-patch_size[1]//2 < 0 or\
+               c[2] > img.shape[2] or c[2] < 0 or\
+               img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
+                   c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
+                   c[2]].shape != patch_size or\
+               np.sum(img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
+                          c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
+                          c[2]]) < 10:
+                timeout -= 1
+                if timeout <= 0:
+                    print("Failed to find valid patch")
+                continue
 
-    return img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
-               c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
-               c[2]]
+            patch = img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
+                        c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
+                        c[2]]
+            if np.random.random() <= transpose_chance:
+                patch = patch.T
+
+        # TODO: handle multiple channels
+        patches[i, :, :, 0] = patch
+
+    return patches
 
 
 def get_patch_3D(img, patch_size):
     '''
     Gets a single 3D patch from a 3D volume
+
+    TODO: make this work for multi patches like above
 
     img is the 3D image tensor
     patch_size is the size of the 3D patch
@@ -93,11 +106,12 @@ def get_patch_3D(img, patch_size):
                 img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
                     c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
                     c[2]-patch_size[2]//2:c[2]+patch_size[2]//2+1, ].shape != patch_size):
-            break 
+            break
 
     return img[c[0]-patch_size[0]//2:c[0]+patch_size[0]//2+1,
                c[1]-patch_size[1]//2:c[1]+patch_size[1]//2+1,
                c[2]-patch_size[2]//2:c[2]+patch_size[2]//2+1, ]
+
 
 def rotate_2D(img, max_angle):
     '''
@@ -114,7 +128,7 @@ def rotate_2D(img, max_angle):
 
     # stack the meshgrid to position vectors, center them around 0 by substracting dim/2
     xy = np.vstack([coords[0].reshape(-1)-float(dims[0])/2,  # x coordinate, centered
-                     coords[1].reshape(-1)-float(dims[1])/2,])  # y coordinate, centered
+                    coords[1].reshape(-1)-float(dims[1])/2, ])  # y coordinate, centered
 
     # create transformation matrix
     #mat = rotation_matrix(angle, direction)
@@ -131,7 +145,7 @@ def rotate_2D(img, max_angle):
     y = y.reshape((dims[0], dims[1]))
 
     # sample
-    new_img = scipy.ndimage.map_coordinates(img, [x,y], order=0)
+    new_img = scipy.ndimage.map_coordinates(img, [x, y], order=0)
 
     return new_img
 
@@ -175,7 +189,7 @@ def rotate_3D(img, max_angle, direction_length):
     z = z.reshape((dims[0], dims[1], dims[2]))
 
     # sample
-    new_vol = scipy.ndimage.map_coordinates(img, [x,y,z], order=0)
+    new_vol = scipy.ndimage.map_coordinates(img, [x, y, z], order=0)
 
     return new_vol
 

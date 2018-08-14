@@ -49,7 +49,8 @@ if __name__ == '__main__':
         if not os.path.exists(d):
             os.makedirs(d)
 
-    patch_size = (175, 175)
+    patch_size = (45, 45)
+    num_patches = 100
 
     ############### MODEL SELECTION ###############
 
@@ -59,17 +60,19 @@ if __name__ == '__main__':
             model = model_from_json(json.load(json_data))
         model.load_weights(results.weights)
     '''
+
+    LR = 1e-5
     if len(patch_size) == 2:
         model = phinet_2D(model_path=MODEL_PATH,
                           n_classes=len(classes),
-                          learning_rate=1e-4,
+                          learning_rate=LR,
                           num_channels=1,
                           num_gpus=NUM_GPUS,
                           verbose=0,)
     elif len(patch_size) == 3:
         model = phinet(model_path=MODEL_PATH,
                        n_classes=len(classes),
-                       learning_rate=1e-4,
+                       learning_rate=LR,
                        num_channels=1,
                        num_gpus=NUM_GPUS,
                        verbose=0,)
@@ -79,15 +82,13 @@ if __name__ == '__main__':
 
     ############### DATA IMPORT ###############
 
-    '''
-    # randomly rotate along any axis by 5 degrees
-    augmentations = {rotate_3D: {"angle": 5,
-                                 "direction": np.random.random(3) - 0.5}}
-    '''
     # augmentations occur in the order they appear
     train_augmentations = {
-        get_patch_2D: {"patch_size": patch_size},
-        rotate_2D: {"max_angle": 15}
+        rotate_3D: {"max_angle": 30,
+                    "direction_length": 3},
+        get_patch_2D: {"patch_size": patch_size,
+                       "num_patches": num_patches,
+                       "transpose_chance": 0.5},
     }
     val_augmentations = {
         get_patch_2D: {"patch_size": patch_size},
@@ -95,16 +96,17 @@ if __name__ == '__main__':
 
     num_files = 2087
     num_val_files = 600
-    batch_size = 32
+    batch_size = 16
 
     params = {
         # 'target_size': (256, 256, 256),
         'target_size': patch_size,
         'batch_size': batch_size,
         'class_mode': 'categorical',
+        'num_patches': num_patches,
         # 'axial_slice': 2,
-        # 'save_to_dir': SAMPLE_AUG_PATH,
-        # 'save_prefix': AUG_FILE_PREFIX,
+        'save_to_dir': SAMPLE_AUG_PATH,
+        'save_prefix': AUG_FILE_PREFIX,
     }
 
     train_params = {'augmentations': train_augmentations}
@@ -135,7 +137,7 @@ if __name__ == '__main__':
     callbacks_list.append(checkpoint)
 
     # Early Stopping, used to quantify convergence
-    es = EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=50)
+    es = EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=20)
     callbacks_list.append(es)
 
     ############### TRAINING ###############
