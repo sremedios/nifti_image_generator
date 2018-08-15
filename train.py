@@ -91,7 +91,9 @@ if __name__ == '__main__':
                        "transpose_chance": 0.5},
     }
     val_augmentations = {
-        get_patch_2D: {"patch_size": patch_size},
+        get_patch_2D: {"patch_size": patch_size,
+                       "num_patches": num_patches,
+                       "transpose_chance": 0},
     }
 
     num_files = 2087
@@ -105,8 +107,8 @@ if __name__ == '__main__':
         'class_mode': 'categorical',
         'num_patches': num_patches,
         # 'axial_slice': 2,
-        'save_to_dir': SAMPLE_AUG_PATH,
-        'save_prefix': AUG_FILE_PREFIX,
+        #'save_to_dir': SAMPLE_AUG_PATH,
+        #'save_prefix': AUG_FILE_PREFIX,
     }
 
     train_params = {'augmentations': train_augmentations}
